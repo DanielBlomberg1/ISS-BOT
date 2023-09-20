@@ -2,6 +2,9 @@ const Discord = require("discord.js");
 require("dotenv").config();
 const ls = require("lightstreamer-client");
 
+const NODE3000004 = {2:"STOP",4:"SHUTDOWN",8:"MAINTENANCE",16:"NORMAL",32:"STANDBY",64:"IDLE",128:"SYSTEM INITIALIZED"}
+
+
 const bot = new Discord.Client({
   intents: [
     Discord.GatewayIntentBits.GuildMessages,
@@ -28,9 +31,15 @@ const pooConnection = new ls.Subscription(
   ["NODE3000008"],
   ["Value" /*, "TimeStamp"*/]
 );
+const tankStateConnection = new ls.Subscription(
+    "MERGE",
+    ["NODE3000004"],
+    ["Value"]
+);
 
 let pee = 0;
 let poo = 0;
+let tankState = "UNDEFINED";
 
 peeConnection.addListener({
   onSubscription: () => {
@@ -50,9 +59,24 @@ pooConnection.addListener({
     poo = updateInfo.getValue("Value");
   },
 });
+tankStateConnection.addListener({
+    onSubscription: () => {
+        console.log("Subscription to tankStateNode established.");
+    },
+    onItemUpdate: (updateInfo) => {
+        console.log("Received tankState update from ISS:", updateInfo.getValue("Value"));
+        tankState = updateInfo.getValue("Value");
+        if(tankState === "128"){
+            bot.channels.cache.forEach(channel => {
+                channel.send("@everyone Someone is taking a piss check it out!")
+            })
+        }
+    },
+});
 
 lsClient.subscribe(pooConnection);
 lsClient.subscribe(peeConnection);
+lsClient.subscribe(tankStateConnection);
 
 lsClient.addListener({
   onListenStart: () => {
@@ -80,7 +104,7 @@ bot.on("messageCreate", async (message) => {
         "%" +
         "\n Pee Percentage is: " +
         Number(pee).toPrecision(3) +
-        "%"
+        "%"+ "\n Tank State is: " + NODE3000004[tankState]
     );
   }
 });
